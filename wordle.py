@@ -2,11 +2,12 @@
 import signal
 from tqdm import tqdm
 from collections import defaultdict, Counter
-from typing import Any, Optional
+from typing import Any
 
 from interfaces import Bot, Game
 from utils import calculate_pattern
 from entropy import EntropyBot
+from rando import RandomBot
 
 DICT_FILE = 'all_words.txt'
 SOLUTIONS_FILE = 'words.txt'
@@ -53,52 +54,56 @@ def main():
     with open(SOLUTIONS_FILE) as ifp:
         possible_solutions = list(map(lambda x: x.strip(), ifp.readlines()))
 
-    bot: Bot = EntropyBot()
-    bot.initialize(dictionary, possible_solutions)
+    bots: dict[str, Bot] = {
+        "entropy": EntropyBot(),
+        "rando": RandomBot()
+        }
+    for bot_name, bot in bots.items():
+        bot.initialize(dictionary, possible_solutions)
 
-    # Overall accumulated stats across all words.
-    stats: dict[str, list[str | int]] = defaultdict(list)
+        # Overall accumulated stats across all words.
+        stats: dict[str, list[str | int]] = defaultdict(list)
 
-    # Don't quit immediately on Ctrl-C, finish the iteratation and print the results.
-    def stop(signum: int, frame: Optional[Any]):
-        print('Aborting after this iteration')
-        global abort
-        abort = True
+        # Don't quit immediately on Ctrl-C, finish the iteratation and print the results.
+        def stop(signum: int, frame: Any):
+            print('Aborting after this iteration')
+            global abort
+            abort = True
 
-    signal.signal(signal.SIGINT, stop)
-    signal.signal(signal.SIGTERM, stop)
+        signal.signal(signal.SIGINT, stop)
+        signal.signal(signal.SIGTERM, stop)
 
-    print('Starting to solve')
-    for word_to_guess in tqdm(possible_solutions):
-        if abort:
-            break
-        
-        game = GameImpl(word_to_guess, HARD_MODE)
-        result = bot.solve(game)
+        print('Starting to solve with', bot_name)
+        for word_to_guess in tqdm(possible_solutions):
+            if abort:
+                break
+            
+            game = GameImpl(word_to_guess, HARD_MODE)
+            result = bot.solve(game)
 
-        if result is None:
-            stats['failed'].append(word_to_guess)
-        elif result != word_to_guess:
-            stats['wrong'].append(word_to_guess)
-        else:
-            num_guesses = game.num_guesses()
-            stats['guesses'].append(num_guesses)
-            if num_guesses > 6:
-                stats['misses'].append(word_to_guess)
+            if result is None:
+                stats['failed'].append(word_to_guess)
+            elif result != word_to_guess:
+                stats['wrong'].append(word_to_guess)
+            else:
+                num_guesses = game.num_guesses()
+                stats['guesses'].append(num_guesses)
+                if num_guesses > 6:
+                    stats['misses'].append(word_to_guess)
 
-    print(len(stats['guesses']), 'successful guesses')
-    print('Average guess count:', 1.0 * sum(stats['guesses']) / len(stats['guesses'])) # type: ignore
-    print('Guess counts of')
-    print('  1:', len([x for x in stats['guesses'] if x == 1]))
-    print('  2:', len([x for x in stats['guesses'] if x == 2]))
-    print('  3:', len([x for x in stats['guesses'] if x == 3]))
-    print('  4:', len([x for x in stats['guesses'] if x == 4])) 
-    print('  5:', len([x for x in stats['guesses'] if x == 5])) 
-    print('  6:', len([x for x in stats['guesses'] if x == 6]))
-    print(' 7+:', len([x for x in stats['guesses'] if x > 6])) # type: ignore
-    print('Missed words:', stats['misses'])
-    print('Wrong answers:', stats['wrong'])
-    print('Failed to complete:', stats['failed'])
+        print(len(stats['guesses']), 'successful guesses')
+        print('Average guess count:', 1.0 * sum(stats['guesses']) / len(stats['guesses'])) # type: ignore
+        print('Guess counts of')
+        print('  1:', len([x for x in stats['guesses'] if x == 1]))
+        print('  2:', len([x for x in stats['guesses'] if x == 2]))
+        print('  3:', len([x for x in stats['guesses'] if x == 3]))
+        print('  4:', len([x for x in stats['guesses'] if x == 4])) 
+        print('  5:', len([x for x in stats['guesses'] if x == 5])) 
+        print('  6:', len([x for x in stats['guesses'] if x == 6]))
+        print(' 7+:', len([x for x in stats['guesses'] if x > 6])) # type: ignore
+        print('Missed words:', stats['misses'])
+        print('Wrong answers:', stats['wrong'])
+        print('Failed to complete:', stats['failed'])
 
 
 if __name__ == "__main__":

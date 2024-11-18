@@ -15,7 +15,7 @@ VERBOSE = False
 
 
 class EntropyBot(Bot):
-    """A Wordle both that uses entropy of guesses to choose the words to guess."""
+    """A Wordle bot that uses entropy of guesses to choose the words to guess."""
 
     def __generate_pattern_dict(self,
                                 dictionary: list[str],
