@@ -1,6 +1,6 @@
 # Wordle-Bot
-An entropy-based strategy to wordle
 
+An entropy-based strategy to wordle
 
 Inspired by [3Blue1Brown](https://www.youtube.com/watch?v=v68zYyaEmEA)
 
@@ -8,7 +8,7 @@ Inspired by [3Blue1Brown](https://www.youtube.com/watch?v=v68zYyaEmEA)
 
 1. Clone the script: 
 ```bash
-git clone https://github.com/GillesVandewiele/Wordle-Bot.git
+git clone https://github.com/camrdale/wordle-bot.git
 ```
 
 2. Install tqdm and scipy
