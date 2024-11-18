@@ -13,6 +13,8 @@ DICT_FILE = 'all_words.txt'
 SOLUTIONS_FILE = 'words.txt'
 DB_FILE = 'pattern_dict.p'
 SAVE_TIME = True
+HARD_MODE = True
+VERBOSE = False
 
 def calculate_pattern(guess: str, true: str) -> tuple[int, ...]:
     """Generate a pattern list that Wordle would return if you guessed
@@ -57,19 +59,33 @@ def generate_pattern_dict(dictionary: list[str],
     return dict(pattern_dict)
 
 
-def calculate_entropies(words: list[str] | set[str],
+def calculate_entropies(words: list[str],
                         remaining_solutions: set[str], 
                         pattern_dict: dict[str, dict[tuple[int, ...], set[str]]]
                         ) -> list[tuple[str, float]]:
     """Calculate the entropy for every word in `words`, taking into account
     the `remaining_solutions`"""
-    print('Calculating entropies for ', len(words), ' words')
+    if VERBOSE: print('Calculating entropies for ', len(words), ' words')
     entropies: list[tuple[str, float]] = []
     for word in words:
         entropies.append((word, entropy(
             [len(matches.intersection(remaining_solutions)) 
              for matches in pattern_dict[word].values()]))) # type: ignore
     return entropies
+
+
+def hard_mode_filter(guesses: list[tuple[str, tuple[int, ...]]], word: str) -> bool:
+    if not HARD_MODE:
+        return True
+    for guess_word, info in guesses:
+        for i, c in enumerate(guess_word):
+            if info[i] == 2 and word[i] != c:
+                return False
+        counts = Counter(c for c, result in zip(guess_word, info) if result > 0)
+        counts.subtract(word)
+        if len(list(counts.elements())) > 0:
+            return False
+    return True
 
 
 abort = False
@@ -108,17 +124,20 @@ def main():
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
 
-    info: tuple[int, ...] = ()
-
     for word_to_guess in tqdm(possible_solutions):
         if abort:
             break
+
+        info: tuple[int, ...] = ()
+        guesses: list[tuple[str, tuple[int, ...]]] = []
+        candidates = list(all_dictionary)
 
         if SAVE_TIME:
             guess_word = 'soare'
             remaining_solutions = set(possible_solutions)
             info = calculate_pattern(guess_word, word_to_guess)
-            print('Guessing: ', guess_word, '  Info: ', info)
+            guesses.append((guess_word, info))
+            if VERBOSE: print('Guessing: ', guess_word, '  Info: ', info)
             matches = pattern_dict[guess_word][info]
             remaining_solutions = remaining_solutions.intersection(matches)
             init_round = 1
@@ -127,18 +146,17 @@ def main():
             init_round = 0
 
         for n_round in range(init_round, N_GUESSES):
-            print('Round: ', n_round + 1, '  Remaining words: ', len(remaining_solutions))
-            if len(remaining_solutions) > 2:
+            candidates = [word for word in candidates if hard_mode_filter(guesses, word)]
+            if VERBOSE: print('Round: ', n_round + 1, '  Remaining words: ', len(remaining_solutions))
+            if len(remaining_solutions) <= 2:
+                # One or two words remaining, choose the one, or pick one (can't do any better).
+                guess_word = sorted(remaining_solutions)[0]
+            else:
                 if n_round == 1 and info in initial_cache:
-                  print('Using previously found guess')
+                  if VERBOSE: print('Using previously found guess')
                   guess_word = initial_cache[info]
                 else:
-                  candidates = all_dictionary
                   entropies = calculate_entropies(candidates, remaining_solutions, pattern_dict)
-
-                  if entropies[0][1] < 0.1:
-                      candidates = remaining_solutions
-                      entropies = calculate_entropies(candidates, remaining_solutions, pattern_dict)
 
                   # Guess the candiate with highest entropy, preferring possible solutions to break ties
                   def sorting(first: tuple[str, float], second: tuple[str, float]):
@@ -155,24 +173,23 @@ def main():
                           return -1
                       return 1
                   entropies.sort(key=functools.cmp_to_key(sorting), reverse=True)
-                  print('Top guesses: ', [(word, '{:.5f}'.format(entropy))
+                  if VERBOSE: print('Top guesses: ', [(word, '{:.5f}'.format(entropy))
                                           for word, entropy in entropies[:6]])
                   guess_word = entropies[0][0]
                   if n_round == 1:
                       initial_cache[info] = guess_word
-            else:
-                # One or two words remaining, choose the one, or pick one (can't do any better).
-                guess_word = sorted(list(remaining_solutions))[0]
             info = calculate_pattern(guess_word, word_to_guess)
 
             # Print round information
-            print('Guessing: ', guess_word, '  Info: ', info)
-            if guess_word == word_to_guess:
-                print(f'WIN IN {n_round + 1} GUESSES!\n\n\n')
+            if VERBOSE: print('Guessing: ', guess_word, '  Info: ', info)
+            if info == (2, 2, 2, 2, 2):
+                if VERBOSE: print(f'WIN IN {n_round + 1} GUESSES!\n\n\n')
                 stats['guesses'].append(n_round + 1)
                 if n_round + 1 > 6:
                     stats['misses'].append(word_to_guess)
                 break
+
+            guesses.append((guess_word, info))
 
             # Filter our list of remaining possible words
             matches = pattern_dict[guess_word][info]
