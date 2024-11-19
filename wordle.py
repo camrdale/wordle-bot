@@ -15,7 +15,7 @@ from rando import RandomBot
 DICT_FILE = 'all_words.txt'
 SOLUTIONS_FILE = 'words.txt'
 DB_FILE = 'pattern_dict.p'
-HARD_MODE = False
+HARD_MODE = True
 
 
 class GameImpl(Game):
