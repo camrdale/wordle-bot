@@ -15,7 +15,7 @@ from rando import RandomBot
 DICT_FILE = 'all_words.txt'
 SOLUTIONS_FILE = 'words.txt'
 DB_FILE = 'pattern_dict.p'
-HARD_MODE = True
+HARD_MODE = False
 
 
 class GameImpl(Game):
@@ -24,10 +24,13 @@ class GameImpl(Game):
         self.__hard_mode = hard_mode
         
         self.__guesses: list[tuple[str, tuple[int, ...]]] = []
+        self.__cache_hits: dict[int, int] = defaultdict(int)
 
-    def guess(self, word: str) -> tuple[int, ...]:
+    def guess(self, word: str, cache_hit: bool=False) -> tuple[int, ...]:
         pattern = calculate_pattern(word, self.__solution)
         self.__guesses.append((word, pattern))
+        if cache_hit:
+            self.__cache_hits[len(self.__guesses)] += 1
         return pattern
 
     def hard_mode_filter(self, word: str) -> bool:
@@ -45,6 +48,9 @@ class GameImpl(Game):
     
     def num_guesses(self) -> int:
         return len(self.__guesses)
+    
+    def cache_hits(self) -> dict[int, int]:
+        return self.__cache_hits
 
 
 def generate_pattern_dict(dictionary: list[str],
@@ -70,7 +76,7 @@ def format_list(words: list[str]) -> str:
     output = words[:10]
     if len(words) > 10:
         output.append('...')
-    return ', '.format(output)
+    return ', '.join(output)
 
 
 abort = False
@@ -104,7 +110,7 @@ def main():
     signal.signal(signal.SIGTERM, stop)
 
     # Overall accumulated stats across all bots and words.
-    stats: dict[str, dict[str, list[Any]]] = {}
+    stats: dict[str, dict[str, Any]] = {}
 
     bots: dict[str, Bot] = {
         "g-more": MoreGroupsBot(),
@@ -117,6 +123,7 @@ def main():
             break
 
         stats[bot_name] = defaultdict(list)
+        stats[bot_name]['cache_hits'] = Counter()
         bot.initialize(dictionary, possible_solutions, pattern_dict)
 
         print('Starting to solve with', bot_name)
@@ -136,6 +143,7 @@ def main():
                 stats[bot_name]['guesses'].append(num_guesses)
                 if num_guesses > 6:
                     stats[bot_name]['misses'].append(word_to_guess)
+            stats[bot_name]['cache_hits'].update(game.cache_hits())
 
     print('Bots:\t\t\t', "\t".join(stats.keys()))
     print('Successful guesses:\t', "\t".join(str(len(bot_stats['guesses'])) for bot_stats in stats.values()))
@@ -154,7 +162,9 @@ def main():
             print('Bot', bot_name, 'wrong answers:', format_list(bot_stats['wrong']))
         if 'failed' in bot_stats:
             print('Bot', bot_name, 'failed to complete:', format_list(bot_stats['failed']))
-
+    for bot_name, bot_stats in stats.items():
+        if len(bot_stats['cache_hits']) > 0:
+            print(bot_name, 'cache hits:', dict(bot_stats['cache_hits']))
 
 if __name__ == "__main__":
     main()

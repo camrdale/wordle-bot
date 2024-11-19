@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 class Game(ABC):
     """A game to solve for a single word."""
     @abstractmethod
-    def guess(self, word: str) -> tuple[int, ...]:
+    def guess(self, word: str, cache_hit: bool=False) -> tuple[int, ...]:
         """Guess a word, returns the pattern identifying correct letters."""
         pass
 
