@@ -17,7 +17,11 @@ class Game(ABC):
 class Bot(ABC):
     """A bot that can play wordle, solving to find words."""
     @abstractmethod
-    def initialize(self, dictionary: list[str], possible_solutions: list[str]) -> None:
+    def initialize(self,
+                   dictionary: list[str],
+                   possible_solutions: list[str],
+                   pattern_dict: dict[str, dict[tuple[int, ...], set[str]]]
+                   ) -> None:
         """Initialize the bot, will be called once before any calls to `solve`."""
         pass
 

@@ -9,10 +9,15 @@ VERBOSE = False
 class RandomBot(Bot):
     """A terrible Wordle bot that chooses words randomly."""
 
-    def initialize(self, dictionary: list[str], possible_solutions: list[str]) -> None:
-        super().initialize(dictionary, possible_solutions)
+    def initialize(self,
+                   dictionary: list[str],
+                   possible_solutions: list[str],
+                   pattern_dict: dict[str, dict[tuple[int, ...], set[str]]]
+                   ) -> None:
+        super().initialize(dictionary, possible_solutions, pattern_dict)
         self.dictionary = dictionary
         self.possible_solutions = possible_solutions
+        self.pattern_dict = pattern_dict
 
     def solve(self, game: Game) -> str | None:
         remaining_solutions = self.possible_solutions

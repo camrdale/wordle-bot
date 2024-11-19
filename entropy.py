@@ -1,41 +1,15 @@
-import os
 import functools
-import pickle
-from tqdm import tqdm
 from scipy.stats import entropy # type: ignore
-from collections import defaultdict
 
 from interfaces import Bot, Game
-from utils import calculate_pattern
 
 N_GUESSES = 10
-DB_FILE = 'pattern_dict.p'
 SAVE_TIME = True
 VERBOSE = False
 
 
 class EntropyBot(Bot):
     """A Wordle bot that uses entropy of guesses to choose the words to guess."""
-
-    def __generate_pattern_dict(self,
-                                dictionary: list[str],
-                                possible_solutions: list[str]
-                                ) -> dict[str, dict[tuple[int, ...], set[str]]]:
-        """For each word and possible information returned, store a list
-        of candidate words
-        >>> pattern_dict = generate_pattern_dict(['weary', 'bears', 'crane'])
-        >>> pattern_dict['crane'][(2, 2, 2, 2, 2)]
-        {'crane'}
-        >>> sorted(pattern_dict['crane'][(0, 1, 2, 0, 1)])
-        ['bears', 'weary']
-        """
-        pattern_dict: dict[str, dict[tuple[int, ...], set[str]]] = defaultdict(lambda: defaultdict(set))
-        for word in tqdm(dictionary):
-            for word2 in possible_solutions:
-                pattern = calculate_pattern(word, word2)
-                pattern_dict[word][pattern].add(word2)
-        return dict(pattern_dict)
-
 
     def __calculate_entropies(self,
                               words: list[str],
@@ -48,23 +22,18 @@ class EntropyBot(Bot):
         for word in words:
             entropies.append((word, entropy(
                 [len(matches.intersection(remaining_solutions)) 
-                for matches in self.pattern_dict[word].values()]))) # type: ignore
+                 for matches in self.pattern_dict[word].values()]))) # type: ignore
         return entropies
 
-    def initialize(self, dictionary: list[str], possible_solutions: list[str]) -> None:
-        super().initialize(dictionary, possible_solutions)
+    def initialize(self,
+                   dictionary: list[str],
+                   possible_solutions: list[str],
+                   pattern_dict: dict[str, dict[tuple[int, ...], set[str]]]
+                   ) -> None:
+        super().initialize(dictionary, possible_solutions, pattern_dict)
         self.dictionary = dictionary
         self.possible_solutions = possible_solutions
-
-        # Calculate the pattern_dict and cache it, or load the cache.
-        if DB_FILE in os.listdir('.'):
-            print('Loading pattern dictionary from file')
-            self.pattern_dict: dict[str, dict[tuple[int, ...], set[str]]] = pickle.load(open(DB_FILE, 'rb'))
-        else:
-            print('Generating pattern dictionary')
-            self.pattern_dict = self.__generate_pattern_dict(dictionary, possible_solutions)
-            print('Saving pattern dictionary to file')
-            pickle.dump(self.pattern_dict, open(DB_FILE, 'wb+'))
+        self.pattern_dict: dict[str, dict[tuple[int, ...], set[str]]] = pattern_dict
 
         # Cache of first round info's and the resulting guess.
         self.initial_cache: dict[tuple[int, ...], str] = {}
@@ -78,6 +47,9 @@ class EntropyBot(Bot):
             remaining_solutions = set(self.possible_solutions)
             info = game.guess(guess_word)
             if VERBOSE: print('Guessing: ', guess_word, '  Info: ', info)
+            if info == (2, 2, 2, 2, 2):
+                if VERBOSE: print(f'WIN IN 1 GUESSES!\n\n\n')
+                return guess_word
             matches = self.pattern_dict[guess_word][info]
             remaining_solutions = remaining_solutions.intersection(matches)
             init_round = 1
