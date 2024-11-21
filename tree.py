@@ -3,7 +3,7 @@
 import pickle
 import functools
 import itertools
-from typing import cast
+from typing import Any, cast
 from collections.abc import Iterable
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -17,6 +17,7 @@ from utils import format_list
 
 N_GUESSES = 10
 VERBOSE = False
+NUM_PROGRESS_BARS = 3
 TREE_DIRECTORY = Path('.') / 'trees'
 TREE_FILE = TREE_DIRECTORY / 'tree.p'
 SAVE_TIME = False
@@ -31,7 +32,12 @@ class Optimizer(ABC):
         self.pattern_dict = pattern_dict
 
     @abstractmethod
-    def optimal_guess(self, remaining_solutions: frozenset[str]) -> 'Guess':
+    def optimal_guess(
+            self,
+            remaining_solutions: frozenset[str],
+            pattern: tuple[int, ...],
+            progress_bar_num: int
+            ) -> 'Guess':
         pass
 
     def sort(
@@ -66,14 +72,16 @@ class Guess:
             self,
             word: str, 
             remaining_solutions: frozenset[str],
-            optimizer: Optimizer
+            optimizer: Optimizer,
+            progress_bar_num: int
             ) -> None:
         self.word = word
         self.patterns: dict[tuple[int, ...], Guess] = {}
-        for pattern, matches in optimizer.pattern_matches(word):
+        for pattern, matches in tqdm(optimizer.pattern_matches(word),
+                                     disable=(progress_bar_num>=NUM_PROGRESS_BARS), position=progress_bar_num, desc=word, leave=None):
             next_solutions = remaining_solutions.intersection(matches)
             if len(next_solutions) > 0 and pattern != (2, 2, 2, 2, 2):
-                self.patterns[pattern] = optimizer.optimal_guess(next_solutions)
+                self.patterns[pattern] = optimizer.optimal_guess(next_solutions, pattern, progress_bar_num+1)
     
     @functools.cached_property
     def height(self) -> int:
@@ -144,18 +152,18 @@ class TreeBot(Bot):
             print('Building tree of all possible guesses')
             remaining_solutions = possible_solutions
             if self.starting_word is not None:
-                self.tree = Guess(self.starting_word, remaining_solutions, optimizer)
+                self.tree = Guess(self.starting_word, remaining_solutions, optimizer, 0)
                 self.height = self.tree.height
                 self.width: int = self.tree.width
             else:
                 self.height = N_GUESSES
                 self.width = len(remaining_solutions)
-                for word in tqdm(optimizer.sort(possible_solutions, remaining_solutions)):
+                for word in tqdm(optimizer.sort(possible_solutions, remaining_solutions), position=0):
                     tree_file = TREE_DIRECTORY / (word + self.word_tree_file_suffix)
                     if self.save_trees and tree_file.exists():
                         tree: Guess = pickle.load(tree_file.open('rb'))
                     else:
-                        tree = Guess(word, remaining_solutions, optimizer)
+                        tree = Guess(word, remaining_solutions, optimizer, 1)
                         if self.save_trees:
                             pickle.dump(tree, tree_file.open('wb+'))
                     height = tree.height
@@ -194,6 +202,11 @@ class TreeBot(Bot):
         return None
 
 
+def remaining_solutions_hashkey(self: Any, remaining_solutions: frozenset[str],  *args: Any, **kwargs: Any) -> tuple[frozenset[str]]:
+    """Cache key based only on the remaining_solutions in the call (the others don't change the result)."""
+    return cachetools.keys.hashkey(remaining_solutions) # type: ignore
+
+
 class HeightOptimizer(Optimizer):
     """Optimizes the tree for minimizing the height and width of the base."""
     def __init__(
@@ -203,11 +216,18 @@ class HeightOptimizer(Optimizer):
         super().__init__(pattern_dict)
         self.cache: cachetools.LRUCache[tuple[frozenset[str]], Guess] = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)
 
-    @cachetools.cachedmethod(lambda self: self.cache)
-    def optimal_guess(self, remaining_solutions: frozenset[str]) -> Guess:
+    @cachetools.cachedmethod(lambda self: self.cache, key=remaining_solutions_hashkey)
+    def optimal_guess(
+            self,
+            remaining_solutions: frozenset[str],
+            pattern: tuple[int, ...],
+            progress_bar_num: int
+            ) -> Guess:
         best_guess = None
-        for word in self.sort(remaining_solutions, remaining_solutions):
-            guess = Guess(word, remaining_solutions, self)
+        for word in tqdm(self.sort(remaining_solutions, remaining_solutions),
+                         disable=(progress_bar_num>=NUM_PROGRESS_BARS), position=progress_bar_num, leave=None,
+                         desc=''.join(str(i) for i in pattern)):
+            guess = Guess(word, remaining_solutions, self, progress_bar_num+1)
             if best_guess is None or guess.height < best_guess.height:
                 best_guess = guess
             elif guess.height == best_guess.height and guess.width < best_guess.width:
@@ -247,11 +267,18 @@ class AverageDepthOptimizer(Optimizer):
         super().__init__(pattern_dict)
         self.cache: cachetools.LRUCache[tuple[frozenset[str]], Guess] = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)
 
-    @cachetools.cachedmethod(lambda self: self.cache)
-    def optimal_guess(self, remaining_solutions: frozenset[str]) -> Guess:
+    @cachetools.cachedmethod(lambda self: self.cache, key=remaining_solutions_hashkey)
+    def optimal_guess(
+            self,
+            remaining_solutions: frozenset[str],
+            pattern: tuple[int, ...],
+            progress_bar_num: int
+            ) -> Guess:
         best_guess = None
-        for word in self.sort(remaining_solutions, remaining_solutions):
-            guess = Guess(word, remaining_solutions, self)
+        for word in tqdm(self.sort(remaining_solutions, remaining_solutions),
+                         disable=(progress_bar_num>=NUM_PROGRESS_BARS), position=progress_bar_num, leave=None,
+                         desc=''.join(str(i) for i in pattern)):
+            guess = Guess(word, remaining_solutions, self, progress_bar_num+1)
             if best_guess is None or guess.total_guesses < best_guess.total_guesses:
                 best_guess = guess
             elif guess.total_guesses == best_guess.total_guesses and guess.height < best_guess.height:
