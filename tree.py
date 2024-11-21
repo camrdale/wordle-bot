@@ -117,11 +117,13 @@ class TreeBot(Bot):
             self, 
             save_trees: bool=True,
             optimal_tree_file: Path=TREE_FILE,
-            word_tree_file_suffix: str='_tree.p'
+            word_tree_file_suffix: str='_tree.p',
+            starting_word: str | None = None
             ) -> None:
         self.save_trees = save_trees
         self.optimal_tree_file = optimal_tree_file
         self.word_tree_file_suffix = word_tree_file_suffix
+        self.starting_word = starting_word
         
     def initialize_with_optimizer(
             self,
@@ -141,8 +143,8 @@ class TreeBot(Bot):
         else:
             print('Building tree of all possible guesses')
             remaining_solutions = possible_solutions
-            if SAVE_TIME:
-                self.tree = Guess('scale', remaining_solutions, optimizer)
+            if self.starting_word is not None:
+                self.tree = Guess(self.starting_word, remaining_solutions, optimizer)
                 self.height = self.tree.height
                 self.width: int = self.tree.width
             else:
@@ -218,6 +220,13 @@ class HeightOptimizer(Optimizer):
 
 class HTreeBot(TreeBot):
     """A tree optimized for minimizing the height and width of the base."""
+    def __init__(
+            self, 
+            save_trees: bool=True
+            ) -> None:
+        super().__init__(
+            save_trees=save_trees, 
+            starting_word='slope' if SAVE_TIME else None)
 
     def initialize(
             self,
@@ -264,7 +273,8 @@ class ATreeBot(TreeBot):
         super().__init__(
             save_trees=save_trees, 
             optimal_tree_file=(TREE_DIRECTORY / 'atree.p'), 
-            word_tree_file_suffix='_atree.p')
+            word_tree_file_suffix='_atree.p',
+            starting_word='slate' if SAVE_TIME else None)
 
     def initialize(
             self,
