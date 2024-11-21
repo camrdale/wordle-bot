@@ -1,15 +1,20 @@
 #!/usr/bin/python
+
 import os
 import pickle
 import signal
-from tqdm import tqdm
+import time
+from datetime import timedelta
 from collections import defaultdict, Counter
 from typing import Any
 
+from tqdm import tqdm
+
 from interfaces import Bot, Game
-from utils import calculate_pattern
+from utils import calculate_pattern, format_list
 from entropy import EntropyBot
 from groups import LargestRemainingBot, MoreGroupsBot
+from tree import HTreeBot, ATreeBot
 from rando import RandomBot
 
 DICT_FILE = 'all_words.txt'
@@ -49,13 +54,16 @@ class GameImpl(Game):
     def num_guesses(self) -> int:
         return len(self.__guesses)
     
+    def starting_word(self) -> str:
+        return self.__guesses[0][0]
+    
     def cache_hits(self) -> dict[int, int]:
         return self.__cache_hits
 
 
 def generate_pattern_dict(dictionary: list[str],
-                          possible_solutions: list[str]
-                          ) -> dict[str, dict[tuple[int, ...], set[str]]]:
+                          possible_solutions: frozenset[str]
+                          ) -> dict[str, dict[tuple[int, ...], frozenset[str]]]:
     """For each word and possible information returned, store a list
     of candidate words
     >>> pattern_dict = generate_pattern_dict(['weary', 'bears', 'crane'])
@@ -66,17 +74,12 @@ def generate_pattern_dict(dictionary: list[str],
     """
     pattern_dict: dict[str, dict[tuple[int, ...], set[str]]] = defaultdict(lambda: defaultdict(set))
     for word in tqdm(dictionary):
-        for word2 in possible_solutions:
-            pattern = calculate_pattern(word, word2)
-            pattern_dict[word][pattern].add(word2)
-    return dict(pattern_dict)
-
-
-def format_list(words: list[str]) -> str:
-    output = words[:10]
-    if len(words) > 10:
-        output.append('...')
-    return ', '.join(output)
+        for solution in possible_solutions:
+            pattern = calculate_pattern(word, solution)
+            pattern_dict[word][pattern].add(solution)
+    return {word: {pattern: frozenset(matches) 
+                   for pattern, matches in pattern_matches.items()} 
+            for word, pattern_matches in pattern_dict.items()}
 
 
 abort = False
@@ -88,17 +91,19 @@ def main():
 
     # Load 2315 words for solutions
     with open(SOLUTIONS_FILE) as ifp:
-        possible_solutions = list(map(lambda x: x.strip(), ifp.readlines()))
+        possible_solutions = frozenset(map(lambda x: x.strip(), ifp.readlines()))
 
     # Calculate the pattern_dict and cache it, or load the cache.
+    start = time.time()
     if DB_FILE in os.listdir('.'):
         print('Loading pattern dictionary from file')
-        pattern_dict: dict[str, dict[tuple[int, ...], set[str]]] = pickle.load(open(DB_FILE, 'rb'))
+        pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]] = pickle.load(open(DB_FILE, 'rb'))
     else:
         print('Generating pattern dictionary')
         pattern_dict = generate_pattern_dict(dictionary, possible_solutions)
         print('Saving pattern dictionary to file')
         pickle.dump(pattern_dict, open(DB_FILE, 'wb+'))
+    pattern_dict_time= time.time() - start
 
     # Don't quit immediately on Ctrl-C, finish the iteratation and print the results.
     def stop(signum: int, frame: Any):
@@ -106,13 +111,12 @@ def main():
         global abort
         abort = True
 
-    signal.signal(signal.SIGINT, stop)
-    signal.signal(signal.SIGTERM, stop)
-
     # Overall accumulated stats across all bots and words.
     stats: dict[str, dict[str, Any]] = {}
 
     bots: dict[str, Bot] = {
+        "a-tree": ATreeBot(),
+        "h-tree": HTreeBot(),
         "g-more": MoreGroupsBot(),
         "g-small": LargestRemainingBot(),
         "entropy": EntropyBot(),
@@ -124,9 +128,18 @@ def main():
 
         stats[bot_name] = defaultdict(list)
         stats[bot_name]['cache_hits'] = Counter()
+        stats[bot_name]['starting_word'] = set()
+
+        start = time.time()
         bot.initialize(dictionary, possible_solutions, pattern_dict)
+        stats[bot_name]['initialize_time'] = time.time() - start + pattern_dict_time
+
+        # Don't quit immediately on Ctrl-C, finish the iteratation and print the results.
+        orig_sigint_handler = signal.signal(signal.SIGINT, stop)
+        orig_sigterm_handler = signal.signal(signal.SIGTERM, stop)
 
         print('Starting to solve with', bot_name)
+        start = time.time()
         for word_to_guess in tqdm(possible_solutions):
             if abort:
                 break
@@ -144,17 +157,27 @@ def main():
                 if num_guesses > 6:
                     stats[bot_name]['misses'].append(word_to_guess)
             stats[bot_name]['cache_hits'].update(game.cache_hits())
+            stats[bot_name]['starting_word'].add(game.starting_word())
 
-    print('Bots:\t\t\t', "\t".join(stats.keys()))
-    print('Successful guesses:\t', "\t".join(str(len(bot_stats['guesses'])) for bot_stats in stats.values()))
-    print('Average guess count:\t', "\t".join('{:.3f}'.format(1.0 * sum(bot_stats['guesses']) / len(bot_stats['guesses'])) for bot_stats in stats.values()))
-    print('Guess counts of\t  1:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x == 1])) for bot_stats in stats.values()))
-    print('\t\t  2:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x == 2])) for bot_stats in stats.values()))
-    print('\t\t  3:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x == 3])) for bot_stats in stats.values()))
-    print('\t\t  4:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x == 4])) for bot_stats in stats.values())) 
-    print('\t\t  5:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x == 5])) for bot_stats in stats.values())) 
-    print('\t\t  6:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x == 6])) for bot_stats in stats.values()))
-    print('\t\t 7+:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x > 6])) for bot_stats in stats.values()))
+        stats[bot_name]['solve_time'] = time.time() - start
+
+        # Restore original signal handlers.
+        signal.signal(signal.SIGINT, orig_sigint_handler)
+        signal.signal(signal.SIGTERM, orig_sigterm_handler)
+
+    print('Bots:\t\t\t', "\t".join(stats.keys()), sep='')
+    print('Initialize time:\t', "\t".join(str(timedelta(seconds=int(bot_stats['initialize_time']))) for bot_stats in stats.values()), sep='')
+    print('Solve time:\t\t', "\t".join(str(timedelta(seconds=int(bot_stats['solve_time']))) for bot_stats in stats.values()), sep='')
+    print('Successful guesses:\t', "\t".join(str(len(bot_stats['guesses'])) for bot_stats in stats.values()), sep='')
+    print('Average guess count:\t', "\t".join('{:.3f}'.format(1.0 * sum(bot_stats['guesses']) / len(bot_stats['guesses'])) for bot_stats in stats.values()), sep='')
+    print('Guess counts of\t  1:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x == 1])) for bot_stats in stats.values()), sep='')
+    print('\t\t  2:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x == 2])) for bot_stats in stats.values()), sep='')
+    print('\t\t  3:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x == 3])) for bot_stats in stats.values()), sep='')
+    print('\t\t  4:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x == 4])) for bot_stats in stats.values()), sep='')
+    print('\t\t  5:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x == 5])) for bot_stats in stats.values()), sep='')
+    print('\t\t  6:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x == 6])) for bot_stats in stats.values()), sep='')
+    print('\t\t 7+:\t', "\t".join(str(len([x for x in bot_stats['guesses'] if x > 6])) for bot_stats in stats.values()), sep='')
+    print('Starting word:\t\t', "\t".join(list(bot_stats['starting_word'])[0] if len(bot_stats['starting_word']) == 1 else '[{}]'.format(len(bot_stats['starting_word'])) for bot_stats in stats.values()), sep='')
     for bot_name, bot_stats in stats.items():
         if 'misses' in bot_stats:
             print('Bot', bot_name, 'missed words:', format_list(bot_stats['misses']))

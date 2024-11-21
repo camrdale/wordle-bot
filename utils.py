@@ -23,3 +23,10 @@ def calculate_pattern(guess: str, solution: str) -> tuple[int, ...]:
         else:
             pattern[i] = 0
     return tuple(pattern)
+
+
+def format_list(words: list[str]) -> str:
+    output = words[:10]
+    if len(words) > 10:
+        output.append('...')
+    return ', '.join(output)

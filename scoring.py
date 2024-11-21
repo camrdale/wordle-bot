@@ -16,14 +16,14 @@ class AbstractScoringBot(Bot):
         self.reverse = reverse
 
     @abstractmethod
-    def score(self, word: str,  remaining_solutions: set[str]) -> float:
+    def score(self, word: str,  remaining_solutions: frozenset[str]) -> float:
         """Calculate the score for a particular guess word."""
         pass
 
     def __calculate_scores(
             self,
             words: list[str],
-            remaining_solutions: set[str]
+            remaining_solutions: frozenset[str]
             ) -> list[tuple[str, float]]:
         """Calculate the score for every word in `words`."""
         if VERBOSE: print('Calculating scores for ', len(words), ' words')
@@ -32,13 +32,13 @@ class AbstractScoringBot(Bot):
     def initialize(
             self,
             dictionary: list[str],
-            possible_solutions: list[str],
-            pattern_dict: dict[str, dict[tuple[int, ...], set[str]]]
+            possible_solutions: frozenset[str],
+            pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]]
             ) -> None:
         super().initialize(dictionary, possible_solutions, pattern_dict)
         self.dictionary = dictionary
         self.possible_solutions = possible_solutions
-        self.pattern_dict: dict[str, dict[tuple[int, ...], set[str]]] = pattern_dict
+        self.pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]] = pattern_dict
 
         # Cache of sequence of patterns and the resulting guess.
         self.cache: dict[tuple[tuple[int, ...], ...], str] = {}
@@ -46,7 +46,7 @@ class AbstractScoringBot(Bot):
     def solve(self, game: Game) -> str | None:
         infos: list[tuple[int, ...]] = []
         candidates = list(self.dictionary)
-        remaining_solutions = set(self.possible_solutions)
+        remaining_solutions = self.possible_solutions
 
         for n_round in range(N_GUESSES):
             candidates = [word for word in candidates if game.hard_mode_filter(word)]

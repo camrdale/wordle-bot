@@ -11,8 +11,8 @@ class RandomBot(Bot):
 
     def initialize(self,
                    dictionary: list[str],
-                   possible_solutions: list[str],
-                   pattern_dict: dict[str, dict[tuple[int, ...], set[str]]]
+                   possible_solutions: frozenset[str],
+                   pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]]
                    ) -> None:
         super().initialize(dictionary, possible_solutions, pattern_dict)
         self.dictionary = dictionary
@@ -20,7 +20,7 @@ class RandomBot(Bot):
         self.pattern_dict = pattern_dict
 
     def solve(self, game: Game) -> str | None:
-        remaining_solutions = self.possible_solutions
+        remaining_solutions = list(self.possible_solutions)
 
         for n_round in range(0, N_GUESSES):
             if VERBOSE: print('Round: ', n_round + 1, '  Remaining words: ', len(remaining_solutions))

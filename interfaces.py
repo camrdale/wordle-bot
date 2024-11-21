@@ -19,8 +19,8 @@ class Bot(ABC):
     @abstractmethod
     def initialize(self,
                    dictionary: list[str],
-                   possible_solutions: list[str],
-                   pattern_dict: dict[str, dict[tuple[int, ...], set[str]]]
+                   possible_solutions: frozenset[str],
+                   pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]]
                    ) -> None:
         """Initialize the bot, will be called once before any calls to `solve`."""
         pass

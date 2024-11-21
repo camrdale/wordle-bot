@@ -4,3 +4,5 @@ __pycache__/
 *$py.class
 
 pattern_dict.p
+*tree.p
+trees/
