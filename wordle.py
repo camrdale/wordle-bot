@@ -10,7 +10,7 @@ from typing import Any
 
 from tqdm import tqdm
 
-from interfaces import Bot, Game
+from interfaces import Bot, Game, CancellationWatcher
 from utils import calculate_pattern, format_list
 from entropy import EntropyBot
 from groups import LargestRemainingBot, MoreGroupsBot
@@ -82,8 +82,6 @@ def generate_pattern_dict(dictionary: list[str],
             for word, pattern_matches in pattern_dict.items()}
 
 
-abort = False
-
 def main():
     # load all 5-letter-words for making patterns 
     with open(DICT_FILE) as ifp:
@@ -105,43 +103,37 @@ def main():
         pickle.dump(pattern_dict, open(DB_FILE, 'wb+'))
     pattern_dict_time= time.time() - start
 
-    # Don't quit immediately on Ctrl-C, finish the iteratation and print the results.
-    def stop(signum: int, frame: Any):
-        print('Aborting after this iteration')
-        global abort
-        abort = True
+    # Don't quit on Ctrl-C, cancel the initialize/solve and proceed to the next step.
+    cancellation_watcher = CancellationWatcher()
+    signal.signal(signal.SIGINT, cancellation_watcher.stop)
 
     # Overall accumulated stats across all bots and words.
     stats: dict[str, dict[str, Any]] = {}
 
     bots: dict[str, Bot] = {
-        "i-tree": ITreeBot(),
-        "a-tree": ATreeBot(),
-        "h-tree": HTreeBot(),
-        "g-more": MoreGroupsBot(),
-        "g-small": LargestRemainingBot(),
-        "entropy": EntropyBot(),
-        "rando": RandomBot(),
+        "i-tree": ITreeBot(cancellation_watcher),
+        "a-tree": ATreeBot(cancellation_watcher),
+        "h-tree": HTreeBot(cancellation_watcher),
+        "g-more": MoreGroupsBot(cancellation_watcher),
+        "g-small": LargestRemainingBot(cancellation_watcher),
+        "entropy": EntropyBot(cancellation_watcher),
+        "rando": RandomBot(cancellation_watcher),
         }
     for bot_name, bot in bots.items():
-        if abort:
-            break
-
         stats[bot_name] = defaultdict(list)
         stats[bot_name]['cache_hits'] = Counter()
         stats[bot_name]['starting_word'] = set()
+        cancellation_watcher.is_cancelled = False
 
         start = time.time()
         bot.initialize(dictionary, possible_solutions, pattern_dict)
         stats[bot_name]['initialize_time'] = time.time() - start + pattern_dict_time
 
-        # Don't quit immediately on Ctrl-C, finish the iteratation and print the results.
-        orig_sigint_handler = signal.signal(signal.SIGINT, stop)
-
         print('Starting to solve with', bot_name)
+        cancellation_watcher.is_cancelled = False
         start = time.time()
         for word_to_guess in tqdm(possible_solutions):
-            if abort:
+            if cancellation_watcher.is_cancelled:
                 break
             
             game = GameImpl(word_to_guess, HARD_MODE)
@@ -160,9 +152,6 @@ def main():
             stats[bot_name]['starting_word'].add(game.starting_word())
 
         stats[bot_name]['solve_time'] = time.time() - start
-
-        # Restore original signal handler.
-        signal.signal(signal.SIGINT, orig_sigint_handler)
 
     print('Bots:\t\t\t', "\t".join(stats.keys()), sep='')
     print('Initialize time:\t', "\t".join(str(timedelta(seconds=int(bot_stats['initialize_time']))) for bot_stats in stats.values()), sep='')

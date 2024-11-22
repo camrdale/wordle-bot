@@ -1,7 +1,7 @@
 import functools
 from abc import abstractmethod
 
-from interfaces import Bot, Game
+from interfaces import Bot, Game, CancellationWatcher
 
 N_GUESSES = 10
 CACHE_PATTERN_DEPTH = 3
@@ -11,8 +11,8 @@ VERBOSE = False
 class AbstractScoringBot(Bot):
     """A base class for Wordle bots that calculate scores for each possible guess."""
 
-    def __init__(self, reverse: bool=False) -> None:
-        super().__init__()
+    def __init__(self, cancellation_watcher: CancellationWatcher, reverse: bool=False) -> None:
+        super().__init__(cancellation_watcher)
         self.reverse = reverse
 
     @abstractmethod

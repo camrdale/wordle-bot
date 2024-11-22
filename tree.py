@@ -12,7 +12,7 @@ import cachetools
 from tqdm import tqdm
 from scipy.stats import entropy # type: ignore
 
-from interfaces import Bot, Game
+from interfaces import Bot, Game, CancellationWatcher
 from utils import format_list
 
 N_GUESSES = 10
@@ -80,9 +80,11 @@ class Guess:
 class Optimizer(ABC):
     def __init__(
             self, 
+            cancellation_watcher: CancellationWatcher,
             pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]],
             tree_file_func: Callable[[str], Path] | None
             ) -> None:
+        self.cancellation_watcher = cancellation_watcher
         self.pattern_dict = pattern_dict
         self.tree_file_func = tree_file_func
 
@@ -163,10 +165,12 @@ class TreeBot(Bot):
     """A Wordle bot that creates an optimal decision tree of guesses for each possible pattern."""
     def __init__(
             self, 
+            cancellation_watcher: CancellationWatcher,
             save_trees: bool=True,
             optimal_tree_file: Path=TREE_FILE,
             starting_word: str | None = None
             ) -> None:
+        super().__init__(cancellation_watcher)
         self.save_trees = save_trees
         self.optimal_tree_file = optimal_tree_file
         self.starting_word = starting_word
@@ -198,9 +202,10 @@ class TreeBot(Bot):
                 if self.tree is None:
                     print('ERROR: Failed to find a tree with the given constraints.')
                     return
-            print('Saving optimal tree to file')
-            if self.save_trees:
-                pickle.dump(self.tree, self.optimal_tree_file.open('wb+'))
+            if not self.cancellation_watcher.is_cancelled:
+                print('Saving optimal tree to file')
+                if self.save_trees:
+                    pickle.dump(self.tree, self.optimal_tree_file.open('wb+'))
         print('Found optimal tree:', self.tree)
 
     def solve(self, game: Game) -> str | None:
@@ -235,10 +240,11 @@ class HeightOptimizer(Optimizer):
     """Optimizes the tree for minimizing the height and width of the base."""
     def __init__(
             self, 
+            cancellation_watcher: CancellationWatcher,
             pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]],
             tree_file_func: Callable[[str], Path] | None
             ) -> None:
-        super().__init__(pattern_dict, tree_file_func)
+        super().__init__(cancellation_watcher, pattern_dict, tree_file_func)
         self.cache: cachetools.LRUCache[tuple[frozenset[str]], Guess] = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)
 
     @cachetools.cachedmethod(lambda self: self.cache, key=remaining_solutions_hashkey)
@@ -254,6 +260,8 @@ class HeightOptimizer(Optimizer):
         for word in tqdm(self.sort(remaining_solutions, remaining_solutions),
                          disable=(progress_bar_num>=NUM_PROGRESS_BARS), position=progress_bar_num, leave=None,
                          desc=''.join(str(i) for i in pattern)):
+            if root_node and self.cancellation_watcher.is_cancelled:
+                break
             guess = self.load_guess(word, remaining_solutions, N_GUESSES, progress_bar_num + 1, root_node)
             if guess is None:
                 continue
@@ -271,9 +279,11 @@ class HTreeBot(TreeBot):
     """A tree optimized for minimizing the height and width of the base."""
     def __init__(
             self, 
+            cancellation_watcher: CancellationWatcher,
             save_trees: bool=True
             ) -> None:
         super().__init__(
+            cancellation_watcher,
             save_trees=save_trees, 
             starting_word='slope' if SAVE_TIME else None)
         self.tree_file_func: Callable[[str], Path] | None = None
@@ -287,17 +297,18 @@ class HTreeBot(TreeBot):
             pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]]
             ) -> None:
         super().initialize(dictionary, possible_solutions, pattern_dict)
-        optimizer = HeightOptimizer(pattern_dict, self.tree_file_func)
+        optimizer = HeightOptimizer(self.cancellation_watcher, pattern_dict, self.tree_file_func)
         super().initialize_with_optimizer(optimizer, dictionary, possible_solutions)
 
 
 class AverageDepthOptimizer(Optimizer):
     def __init__(
             self, 
+            cancellation_watcher: CancellationWatcher,
             pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]],
             tree_file_func: Callable[[str], Path] | None
             ) -> None:
-        super().__init__(pattern_dict, tree_file_func)
+        super().__init__(cancellation_watcher, pattern_dict, tree_file_func)
         self.cache: cachetools.LRUCache[tuple[frozenset[str]], Guess] = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)
 
     @cachetools.cachedmethod(lambda self: self.cache, key=remaining_solutions_hashkey)
@@ -313,6 +324,8 @@ class AverageDepthOptimizer(Optimizer):
         for word in tqdm(self.sort(remaining_solutions, remaining_solutions),
                          disable=(progress_bar_num>=NUM_PROGRESS_BARS), position=progress_bar_num, leave=None,
                          desc=''.join(str(i) for i in pattern)):
+            if root_node and self.cancellation_watcher.is_cancelled:
+                break
             guess = self.load_guess(word, remaining_solutions, N_GUESSES, progress_bar_num + 1, root_node)
             if guess is None:
                 continue
@@ -332,9 +345,11 @@ class ATreeBot(TreeBot):
     """A tree optimized for minimizing the average depth (total number of guesses)."""
     def __init__(
             self, 
+            cancellation_watcher: CancellationWatcher,
             save_trees: bool=True
             ) -> None:
         super().__init__(
+            cancellation_watcher,
             save_trees=save_trees, 
             optimal_tree_file=(TREE_DIRECTORY / 'atree.p'), 
             starting_word='slate' if SAVE_TIME else None)
@@ -349,7 +364,7 @@ class ATreeBot(TreeBot):
             pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]]
             ) -> None:
         super().initialize(dictionary, possible_solutions, pattern_dict)
-        optimizer = AverageDepthOptimizer(pattern_dict, self.tree_file_func)
+        optimizer = AverageDepthOptimizer(self.cancellation_watcher, pattern_dict, self.tree_file_func)
         super().initialize_with_optimizer(optimizer, dictionary, possible_solutions)
 
 
@@ -361,10 +376,11 @@ def remaining_solutions_and_height_limit_hashkey(self: Any, remaining_solutions:
 class IdealOptimizer(Optimizer):
     def __init__(
             self, 
+            cancellation_watcher: CancellationWatcher,
             pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]],
             tree_file_func: Callable[[str], Path] | None
             ) -> None:
-        super().__init__(pattern_dict, tree_file_func)
+        super().__init__(cancellation_watcher, pattern_dict, tree_file_func)
         self.cache: cachetools.LRUCache[tuple[frozenset[str]], Guess] = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)
 
     @cachetools.cachedmethod(lambda self: self.cache, key=remaining_solutions_and_height_limit_hashkey)
@@ -380,6 +396,8 @@ class IdealOptimizer(Optimizer):
         for word in tqdm(self.sort(remaining_solutions, remaining_solutions),
                          disable=(progress_bar_num>=NUM_PROGRESS_BARS), position=progress_bar_num, leave=None,
                          desc=''.join(str(i) for i in pattern)):
+            if root_node and self.cancellation_watcher.is_cancelled:
+                break
             guess = self.load_guess(word, remaining_solutions, height_limit, progress_bar_num + 1, root_node)
             if guess is None:
                 continue
@@ -395,9 +413,11 @@ class ITreeBot(TreeBot):
     """A tree optimized for first not failing any words, then to minimize the average depth."""
     def __init__(
             self, 
+            cancellation_watcher: CancellationWatcher,
             save_trees: bool=True
             ) -> None:
         super().__init__(
+            cancellation_watcher,
             save_trees=save_trees, 
             optimal_tree_file=(TREE_DIRECTORY / 'itree.p'),
             starting_word='slope' if SAVE_TIME else None)
@@ -412,7 +432,7 @@ class ITreeBot(TreeBot):
             pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]]
             ) -> None:
         super().initialize(dictionary, possible_solutions, pattern_dict)
-        optimizer = IdealOptimizer(pattern_dict, self.tree_file_func)
+        optimizer = IdealOptimizer(self.cancellation_watcher, pattern_dict, self.tree_file_func)
         super().initialize_with_optimizer(optimizer, dictionary, possible_solutions)
 
 
@@ -421,7 +441,7 @@ if __name__ == "__main__":
     possible_solutions = frozenset(['crane', 'bears', 'weary'])
     dictionary = list(possible_solutions)
     pattern_dict = generate_pattern_dict(dictionary, possible_solutions)
-    bot = ITreeBot(save_trees=False)
+    bot = ITreeBot(CancellationWatcher(), save_trees=False)
     bot.initialize(dictionary, possible_solutions, pattern_dict)
     for word_to_guess in possible_solutions:
         game = GameImpl(word_to_guess, True)

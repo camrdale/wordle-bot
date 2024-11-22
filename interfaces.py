@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 
 class Game(ABC):
@@ -14,8 +15,24 @@ class Game(ABC):
         pass
 
 
+class CancellationWatcher:
+    """A mutable object that can be passed by reference to signal cancellation of the call."""
+
+    def __init__(self) -> None:
+        self.is_cancelled = False
+
+    def cancel(self) -> None:
+        self.is_cancelled = True
+
+    def stop(self, signum: int, frame: Any) -> None:
+        self.cancel()
+
+
 class Bot(ABC):
     """A bot that can play wordle, solving to find words."""
+    def __init__(self, cancellation_watcher: CancellationWatcher) -> None:
+        self.cancellation_watcher = cancellation_watcher
+
     @abstractmethod
     def initialize(self,
                    dictionary: list[str],

@@ -1,11 +1,12 @@
+from interfaces import CancellationWatcher
 from scoring import AbstractScoringBot
 
 
 class LargestRemainingBot(AbstractScoringBot):
     """A Wordle bot that minimizes the largest remaining group after a guess."""
 
-    def __init__(self) -> None:
-        super().__init__(reverse=True)
+    def __init__(self, cancellation_watcher: CancellationWatcher) -> None:
+        super().__init__(cancellation_watcher, reverse=True)
 
     def score(self, word: str,  remaining_solutions: frozenset[str]) -> float:
         return max([

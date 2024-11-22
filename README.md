@@ -121,15 +121,15 @@ Letting all the bots run over all 2,315 possible solutions, results in this:
 | ----------------------: | -------: | -------: | -------: | -------: | --------: | --------: | ------: |
 |     **Initialize time** |     ~48h |     ~60h |     ~60h |   1m 39s |    1m 39s |    1m 39s |      0s |
 |          **Solve time** |       0s |       0s |       0s |   1m 40s |    1m 42s |    1m 41s |     38s |
-| **Average guess count** |        ? |    3.518 |    3.646 |    3.527 |     3.672 |     3.604 |   6.443 |
+| **Average guess count** |    3.554 |    3.518 |    3.622 |    3.527 |     3.672 |     3.604 |   6.443 |
 |  **Words guessed in 1** |        1 |        1 |        1 |        1 |         1 |         0 |       0 |
-|                   **2** |        ? |      146 |      120 |      122 |       104 |        77 |      35 |
-|                   **3** |        ? |     1015 |      827 |     1085 |       891 |      1041 |      89 |
-|                   **4** |        ? |      986 |     1121 |      912 |      1040 |       973 |     223 |
-|                   **5** |        ? |      143 |      242 |      164 |       228 |       179 |     270 |
-|                   **6** |        ? |       20 |        4 |       22 |        40 |        38 |     309 |
+|                   **2** |      130 |      146 |      125 |      122 |       104 |        77 |      35 |
+|                   **3** |      991 |     1015 |      855 |     1085 |       891 |      1041 |      89 |
+|                   **4** |      998 |      986 |     1102 |      912 |      1040 |       973 |     223 |
+|                   **5** |      169 |      143 |      230 |      164 |       228 |       179 |     270 |
+|                   **6** |       26 |       20 |        2 |       22 |        40 |        38 |     309 |
 |                  **7+** |        0 |        4 |        0 |        9 |        11 |         7 |     843 |
-|       **Starting word** |        ? |    SLATE |    SLOPE |    TRACE |     RAISE |     SOARE |     N/A |
+|       **Starting word** |    PLATE |    SLATE |    SLEPT |    TRACE |     RAISE |     SOARE |     N/A |
 
 Note that only the Ideal Tree Bot and Height Tree Bot were able to succeed with
 all words in 6 guesses, which is because they are optimized for that use case.
