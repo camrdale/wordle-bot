@@ -187,26 +187,26 @@ class TreeBot(Bot):
         self.tree: Guess | None = None
 
         if self.save_trees and self.optimal_tree_file.exists():
-            print('Loading tree from file')
+            print(type(self).__name__, 'Loading tree from file')
             self.tree = pickle.load(self.optimal_tree_file.open('rb'))
         else:
-            print('Building tree of all possible guesses')
+            print(type(self).__name__, 'Building tree of all possible guesses')
             remaining_solutions = possible_solutions
             if self.starting_word is not None:
                 self.tree = optimizer.build_tree(self.starting_word, remaining_solutions, 6, 0)
                 if self.tree is None:
-                    print('ERROR: Starting word', self.starting_word, 'does not meet the given constraints.')
+                    print(type(self).__name__, 'ERROR: Starting word', self.starting_word, 'does not meet the given constraints.')
                     return
             else:
                 self.tree = optimizer.optimal_guess(remaining_solutions, 6, (), 0, root_node=True)
                 if self.tree is None:
-                    print('ERROR: Failed to find a tree with the given constraints.')
+                    print(type(self).__name__, 'ERROR: Failed to find a tree with the given constraints.')
                     return
             if not self.cancellation_watcher.is_cancelled:
-                print('Saving optimal tree to file')
+                print(type(self).__name__, 'Saving optimal tree to file')
                 if self.save_trees:
                     pickle.dump(self.tree, self.optimal_tree_file.open('wb+'))
-        print('Found optimal tree:', self.tree)
+        print(type(self).__name__, 'Found optimal tree:', self.tree)
 
     def solve(self, game: Game) -> str | None:
         if self.tree is None:
@@ -217,14 +217,14 @@ class TreeBot(Bot):
             pattern = game.guess(guess.word)
 
             # Print round information
-            if VERBOSE: print('Guessing: ', guess.word, '  Info: ', pattern)
+            if VERBOSE: print(type(self).__name__, 'Guessing: ', guess.word, '  Info: ', pattern)
             if pattern == (2, 2, 2, 2, 2):
-                if VERBOSE: print(f'WIN IN {n_round + 1} GUESSES!')
+                if VERBOSE: print(type(self).__name__, f'WIN IN {n_round + 1} GUESSES!')
                 return guess.word
 
             # Go to the next guess in the tree
             if pattern not in guess.patterns:
-                if VERBOSE: print('Failed to find pattern', pattern, 'as possible result after guess:', guess.word)
+                if VERBOSE: print(type(self).__name__, 'Failed to find pattern', pattern, 'as possible result after guess:', guess.word)
                 return None
             guess: Guess = guess.patterns[pattern]
 

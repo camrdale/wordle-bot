@@ -26,7 +26,7 @@ class AbstractScoringBot(Bot):
             remaining_solutions: frozenset[str]
             ) -> list[tuple[str, float]]:
         """Calculate the score for every word in `words`."""
-        if VERBOSE: print('Calculating scores for ', len(words), ' words')
+        if VERBOSE: print(type(self).__name__, 'Calculating scores for ', len(words), ' words')
         return [(word, self.score(word, remaining_solutions)) for word in words]
 
     def initialize(
@@ -50,14 +50,14 @@ class AbstractScoringBot(Bot):
 
         for n_round in range(N_GUESSES):
             candidates = [word for word in candidates if game.hard_mode_filter(word)]
-            if VERBOSE: print('Round: ', n_round + 1, '  Remaining words: ', len(remaining_solutions))
+            if VERBOSE: print(type(self).__name__, 'Round: ', n_round + 1, '  Remaining words: ', len(remaining_solutions))
             cache_hit = False
             if len(remaining_solutions) <= 2:
                 # One or two words remaining, choose the one, or pick one (can't do any better).
                 guess_word = sorted(remaining_solutions)[0]
             else:
                 if tuple(infos) in self.cache:
-                    if VERBOSE: print('Using previously found guess')
+                    if VERBOSE: print(type(self).__name__, 'Using previously found guess')
                     guess_word = self.cache[tuple(infos)]
                     cache_hit = True
                 else:
@@ -78,7 +78,7 @@ class AbstractScoringBot(Bot):
                             return -1
                         return 1
                     scores.sort(key=functools.cmp_to_key(sorting), reverse=True)
-                    if VERBOSE: print('Top guesses: ', [
+                    if VERBOSE: print(type(self).__name__, 'Top guesses: ', [
                         (word, '{:.3f}'.format(score)) for word, score in scores[:6]])
                     guess_word = scores[0][0]
                     if n_round < CACHE_PATTERN_DEPTH:
@@ -87,9 +87,9 @@ class AbstractScoringBot(Bot):
             infos.append(info)
 
             # Print round information
-            if VERBOSE: print('Guessing: ', guess_word, '  Info: ', info)
+            if VERBOSE: print(type(self).__name__, 'Guessing: ', guess_word, '  Info: ', info)
             if info == (2, 2, 2, 2, 2):
-                if VERBOSE: print(f'WIN IN {n_round + 1} GUESSES!\n\n\n')
+                if VERBOSE: print(type(self).__name__, f'WIN IN {n_round + 1} GUESSES!\n\n\n')
                 return guess_word
 
             # Filter our list of remaining possible words
