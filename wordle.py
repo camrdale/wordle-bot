@@ -14,7 +14,7 @@ from interfaces import Bot, Game
 from utils import calculate_pattern, format_list
 from entropy import EntropyBot
 from groups import LargestRemainingBot, MoreGroupsBot
-from tree import HTreeBot, ATreeBot
+from tree import HTreeBot, ATreeBot, ITreeBot
 from rando import RandomBot
 
 DICT_FILE = 'all_words.txt'
@@ -115,6 +115,7 @@ def main():
     stats: dict[str, dict[str, Any]] = {}
 
     bots: dict[str, Bot] = {
+        "i-tree": ITreeBot(),
         "a-tree": ATreeBot(),
         "h-tree": HTreeBot(),
         "g-more": MoreGroupsBot(),
@@ -136,7 +137,6 @@ def main():
 
         # Don't quit immediately on Ctrl-C, finish the iteratation and print the results.
         orig_sigint_handler = signal.signal(signal.SIGINT, stop)
-        orig_sigterm_handler = signal.signal(signal.SIGTERM, stop)
 
         print('Starting to solve with', bot_name)
         start = time.time()
@@ -161,9 +161,8 @@ def main():
 
         stats[bot_name]['solve_time'] = time.time() - start
 
-        # Restore original signal handlers.
+        # Restore original signal handler.
         signal.signal(signal.SIGINT, orig_sigint_handler)
-        signal.signal(signal.SIGTERM, orig_sigterm_handler)
 
     print('Bots:\t\t\t', "\t".join(stats.keys()), sep='')
     print('Initialize time:\t', "\t".join(str(timedelta(seconds=int(bot_stats['initialize_time']))) for bot_stats in stats.values()), sep='')

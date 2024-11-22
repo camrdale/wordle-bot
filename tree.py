@@ -3,7 +3,7 @@
 import pickle
 import functools
 import itertools
-from typing import Any, cast
+from typing import Any, Callable, cast
 from collections.abc import Iterable
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -24,41 +24,6 @@ SAVE_TIME = False
 MAX_CACHE_SIZE = 2000000
 
 
-class Optimizer(ABC):
-    def __init__(
-            self, 
-            pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]]
-            ) -> None:
-        self.pattern_dict = pattern_dict
-
-    @abstractmethod
-    def optimal_guess(
-            self,
-            remaining_solutions: frozenset[str],
-            pattern: tuple[int, ...],
-            progress_bar_num: int
-            ) -> 'Guess':
-        pass
-
-    def sort(
-            self,
-            words: Iterable[str],
-            remaining_solutions: frozenset[str]
-            ) -> Iterable[str]:
-        """Sort words by their entropy, highest first."""
-        entropy_words = [
-            (cast(float, entropy([len(matches.intersection(remaining_solutions))
-                                  for matches in self.pattern_dict[word].values()])),
-            word) for word in words]
-        return [word for _, word in sorted(entropy_words, reverse=True)]
-
-    def status(self) -> str:
-        return ''
-
-    def pattern_matches(self, word: str) -> Iterable[tuple[tuple[int, ...], frozenset[str]]]:
-        return self.pattern_dict[word].items()
-
-
 class Guess:
     """A node in the tree, representing a guess.
     
@@ -71,17 +36,10 @@ class Guess:
     def __init__(
             self,
             word: str, 
-            remaining_solutions: frozenset[str],
-            optimizer: Optimizer,
-            progress_bar_num: int
+            patterns: dict[tuple[int, ...], 'Guess']
             ) -> None:
         self.word = word
-        self.patterns: dict[tuple[int, ...], Guess] = {}
-        for pattern, matches in tqdm(optimizer.pattern_matches(word),
-                                     disable=(progress_bar_num>=NUM_PROGRESS_BARS), position=progress_bar_num, desc=word, leave=None):
-            next_solutions = remaining_solutions.intersection(matches)
-            if len(next_solutions) > 0 and pattern != (2, 2, 2, 2, 2):
-                self.patterns[pattern] = optimizer.optimal_guess(next_solutions, pattern, progress_bar_num+1)
+        self.patterns = patterns
     
     @functools.cached_property
     def height(self) -> int:
@@ -119,18 +77,98 @@ class Guess:
                 pattern.words_at_depth(depth-1) for pattern in self.patterns.values()))
 
 
+class Optimizer(ABC):
+    def __init__(
+            self, 
+            pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]],
+            tree_file_func: Callable[[str], Path] | None
+            ) -> None:
+        self.pattern_dict = pattern_dict
+        self.tree_file_func = tree_file_func
+
+    def build_tree(
+            self,
+            word: str, 
+            remaining_solutions: frozenset[str],
+            height_limit: int,
+            progress_bar_num: int
+            ) -> Guess | None:
+        patterns: dict[tuple[int, ...], Guess] = {}
+        for pattern, matches in tqdm(self.pattern_matches(word),
+                                     disable=(progress_bar_num>=NUM_PROGRESS_BARS), position=progress_bar_num, desc=word, leave=None):
+            next_solutions = remaining_solutions.intersection(matches)
+            if len(next_solutions) > 0 and pattern != (2, 2, 2, 2, 2):
+                best_guess = self.optimal_guess(
+                    next_solutions, height_limit - 1, pattern, progress_bar_num + 1)
+                if best_guess is None:
+                    return None
+                patterns[pattern] = best_guess
+        guess = Guess(word, patterns)
+        if guess.height >= height_limit:
+            return None
+        return guess
+
+    def load_guess(
+            self, 
+            word: str, 
+            remaining_solutions: frozenset[str],
+            height_limit: int,
+            progress_bar_num: int,
+            root_node: bool
+            ) -> Guess | None:
+        guess: Guess | None = None
+        if root_node and self.tree_file_func is not None and self.tree_file_func(word).exists():
+            guess = pickle.load(self.tree_file_func(word).open('rb'))
+        else:
+            guess = self.build_tree(word, remaining_solutions, height_limit, progress_bar_num)
+            if root_node and self.tree_file_func is not None:
+                pickle.dump(guess, self.tree_file_func(word).open('wb+'))
+        if VERBOSE and root_node: print(
+            guess if guess is not None else 'Failed({})'.format(word), ":",
+            format_list(guess.words_at_depth(guess.height) if guess is not None else []),
+            self.status())
+        return guess
+
+    @abstractmethod
+    def optimal_guess(
+            self,
+            remaining_solutions: frozenset[str],
+            height_limit: int,
+            pattern: tuple[int, ...],
+            progress_bar_num: int,
+            root_node: bool=False
+            ) -> Guess | None:
+        pass
+
+    def sort(
+            self,
+            words: Iterable[str],
+            remaining_solutions: frozenset[str]
+            ) -> Iterable[str]:
+        """Sort words by their entropy, highest first."""
+        entropy_words = [
+            (cast(float, entropy([len(matches.intersection(remaining_solutions))
+                                  for matches in self.pattern_dict[word].values()])),
+            word) for word in words]
+        return [word for _, word in sorted(entropy_words, reverse=True)]
+
+    def status(self) -> str:
+        return ''
+
+    def pattern_matches(self, word: str) -> Iterable[tuple[tuple[int, ...], frozenset[str]]]:
+        return self.pattern_dict[word].items()
+
+
 class TreeBot(Bot):
     """A Wordle bot that creates an optimal decision tree of guesses for each possible pattern."""
     def __init__(
             self, 
             save_trees: bool=True,
             optimal_tree_file: Path=TREE_FILE,
-            word_tree_file_suffix: str='_tree.p',
             starting_word: str | None = None
             ) -> None:
         self.save_trees = save_trees
         self.optimal_tree_file = optimal_tree_file
-        self.word_tree_file_suffix = word_tree_file_suffix
         self.starting_word = starting_word
         
     def initialize_with_optimizer(
@@ -142,47 +180,33 @@ class TreeBot(Bot):
         TREE_DIRECTORY.mkdir(exist_ok=True)
         self.dictionary = dictionary
         self.possible_solutions = possible_solutions
+        self.tree: Guess | None = None
 
         if self.save_trees and self.optimal_tree_file.exists():
             print('Loading tree from file')
-            self.tree: Guess = pickle.load(self.optimal_tree_file.open('rb'))
-            self.height = self.tree.height
-            self.width: int = self.tree.width
+            self.tree = pickle.load(self.optimal_tree_file.open('rb'))
         else:
             print('Building tree of all possible guesses')
             remaining_solutions = possible_solutions
             if self.starting_word is not None:
-                self.tree = Guess(self.starting_word, remaining_solutions, optimizer, 0)
-                self.height = self.tree.height
-                self.width: int = self.tree.width
+                self.tree = optimizer.build_tree(self.starting_word, remaining_solutions, 6, 0)
+                if self.tree is None:
+                    print('ERROR: Starting word', self.starting_word, 'does not meet the given constraints.')
+                    return
             else:
-                self.height = N_GUESSES
-                self.width = len(remaining_solutions)
-                for word in tqdm(optimizer.sort(possible_solutions, remaining_solutions), position=0):
-                    tree_file = TREE_DIRECTORY / (word + self.word_tree_file_suffix)
-                    if self.save_trees and tree_file.exists():
-                        tree: Guess = pickle.load(tree_file.open('rb'))
-                    else:
-                        tree = Guess(word, remaining_solutions, optimizer, 1)
-                        if self.save_trees:
-                            pickle.dump(tree, tree_file.open('wb+'))
-                    height = tree.height
-                    width: int = tree.width
-                    if VERBOSE: print(tree, ":", format_list(tree.words_at_depth(height)), optimizer.status())
-                    if height < self.height:
-                        self.tree = tree
-                        self.height = height
-                        self.width = width
-                    elif height == self.height and width < self.width:
-                        self.tree = tree
-                        self.height = height
-                        self.width = width
+                self.tree = optimizer.optimal_guess(remaining_solutions, 6, (), 0, root_node=True)
+                if self.tree is None:
+                    print('ERROR: Failed to find a tree with the given constraints.')
+                    return
             print('Saving optimal tree to file')
             if self.save_trees:
                 pickle.dump(self.tree, self.optimal_tree_file.open('wb+'))
-        if VERBOSE: print('Tree starting with', self.tree.word, 'is optimal with height:', self.height, 'and width:', self.width)
+        print('Found optimal tree:', self.tree)
 
     def solve(self, game: Game) -> str | None:
+        if self.tree is None:
+            return None
+
         guess = self.tree
         for n_round in range(N_GUESSES):
             pattern = game.guess(guess.word)
@@ -211,28 +235,33 @@ class HeightOptimizer(Optimizer):
     """Optimizes the tree for minimizing the height and width of the base."""
     def __init__(
             self, 
-            pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]]
+            pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]],
+            tree_file_func: Callable[[str], Path] | None
             ) -> None:
-        super().__init__(pattern_dict)
+        super().__init__(pattern_dict, tree_file_func)
         self.cache: cachetools.LRUCache[tuple[frozenset[str]], Guess] = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)
 
     @cachetools.cachedmethod(lambda self: self.cache, key=remaining_solutions_hashkey)
     def optimal_guess(
             self,
             remaining_solutions: frozenset[str],
+            height_limit: int,
             pattern: tuple[int, ...],
-            progress_bar_num: int
-            ) -> Guess:
+            progress_bar_num: int,
+            root_node: bool=False
+            ) -> Guess | None:
         best_guess = None
         for word in tqdm(self.sort(remaining_solutions, remaining_solutions),
                          disable=(progress_bar_num>=NUM_PROGRESS_BARS), position=progress_bar_num, leave=None,
                          desc=''.join(str(i) for i in pattern)):
-            guess = Guess(word, remaining_solutions, self, progress_bar_num+1)
+            guess = self.load_guess(word, remaining_solutions, N_GUESSES, progress_bar_num + 1, root_node)
+            if guess is None:
+                continue
             if best_guess is None or guess.height < best_guess.height:
                 best_guess = guess
             elif guess.height == best_guess.height and guess.width < best_guess.width:
                 best_guess = guess
-        return cast(Guess, best_guess)
+        return best_guess
     
     def status(self) -> str:
         return '(cache={:.1%})'.format(self.cache.currsize / MAX_CACHE_SIZE)
@@ -247,6 +276,9 @@ class HTreeBot(TreeBot):
         super().__init__(
             save_trees=save_trees, 
             starting_word='slope' if SAVE_TIME else None)
+        self.tree_file_func: Callable[[str], Path] | None = None
+        if save_trees:
+            self.tree_file_func = lambda word: TREE_DIRECTORY / (word + '_tree.p')
 
     def initialize(
             self,
@@ -255,37 +287,42 @@ class HTreeBot(TreeBot):
             pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]]
             ) -> None:
         super().initialize(dictionary, possible_solutions, pattern_dict)
-        optimizer = HeightOptimizer(pattern_dict)
+        optimizer = HeightOptimizer(pattern_dict, self.tree_file_func)
         super().initialize_with_optimizer(optimizer, dictionary, possible_solutions)
 
 
 class AverageDepthOptimizer(Optimizer):
     def __init__(
             self, 
-            pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]]
+            pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]],
+            tree_file_func: Callable[[str], Path] | None
             ) -> None:
-        super().__init__(pattern_dict)
+        super().__init__(pattern_dict, tree_file_func)
         self.cache: cachetools.LRUCache[tuple[frozenset[str]], Guess] = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)
 
     @cachetools.cachedmethod(lambda self: self.cache, key=remaining_solutions_hashkey)
     def optimal_guess(
             self,
             remaining_solutions: frozenset[str],
+            height_limit: int,
             pattern: tuple[int, ...],
-            progress_bar_num: int
-            ) -> Guess:
+            progress_bar_num: int,
+            root_node: bool=False
+            ) -> Guess | None:
         best_guess = None
         for word in tqdm(self.sort(remaining_solutions, remaining_solutions),
                          disable=(progress_bar_num>=NUM_PROGRESS_BARS), position=progress_bar_num, leave=None,
                          desc=''.join(str(i) for i in pattern)):
-            guess = Guess(word, remaining_solutions, self, progress_bar_num+1)
+            guess = self.load_guess(word, remaining_solutions, N_GUESSES, progress_bar_num + 1, root_node)
+            if guess is None:
+                continue
             if best_guess is None or guess.total_guesses < best_guess.total_guesses:
                 best_guess = guess
             elif guess.total_guesses == best_guess.total_guesses and guess.height < best_guess.height:
                 best_guess = guess
             elif guess.total_guesses == best_guess.total_guesses and guess.height == best_guess.height and guess.width < best_guess.width:
                 best_guess = guess
-        return cast(Guess, best_guess)
+        return best_guess
     
     def status(self) -> str:
         return '(cache={:.1%})'.format(self.cache.currsize / MAX_CACHE_SIZE)
@@ -300,8 +337,10 @@ class ATreeBot(TreeBot):
         super().__init__(
             save_trees=save_trees, 
             optimal_tree_file=(TREE_DIRECTORY / 'atree.p'), 
-            word_tree_file_suffix='_atree.p',
             starting_word='slate' if SAVE_TIME else None)
+        self.tree_file_func: Callable[[str], Path] | None = None
+        if save_trees:
+            self.tree_file_func = lambda word: TREE_DIRECTORY / (word + '_atree.p')
 
     def initialize(
             self,
@@ -310,7 +349,70 @@ class ATreeBot(TreeBot):
             pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]]
             ) -> None:
         super().initialize(dictionary, possible_solutions, pattern_dict)
-        optimizer = AverageDepthOptimizer(pattern_dict)
+        optimizer = AverageDepthOptimizer(pattern_dict, self.tree_file_func)
+        super().initialize_with_optimizer(optimizer, dictionary, possible_solutions)
+
+
+def remaining_solutions_and_height_limit_hashkey(self: Any, remaining_solutions: frozenset[str], height_limit: int,  *args: Any, **kwargs: Any) -> tuple[frozenset[str]]:
+    """Cache key based on the remaining_solutions and height limit in the call."""
+    return cachetools.keys.hashkey(remaining_solutions, height_limit) # type: ignore
+
+
+class IdealOptimizer(Optimizer):
+    def __init__(
+            self, 
+            pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]],
+            tree_file_func: Callable[[str], Path] | None
+            ) -> None:
+        super().__init__(pattern_dict, tree_file_func)
+        self.cache: cachetools.LRUCache[tuple[frozenset[str]], Guess] = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)
+
+    @cachetools.cachedmethod(lambda self: self.cache, key=remaining_solutions_and_height_limit_hashkey)
+    def optimal_guess(
+            self,
+            remaining_solutions: frozenset[str],
+            height_limit: int,
+            pattern: tuple[int, ...],
+            progress_bar_num: int,
+            root_node: bool=False
+            ) -> Guess | None:
+        best_guess = None
+        for word in tqdm(self.sort(remaining_solutions, remaining_solutions),
+                         disable=(progress_bar_num>=NUM_PROGRESS_BARS), position=progress_bar_num, leave=None,
+                         desc=''.join(str(i) for i in pattern)):
+            guess = self.load_guess(word, remaining_solutions, height_limit, progress_bar_num + 1, root_node)
+            if guess is None:
+                continue
+            if best_guess is None or guess.total_guesses < best_guess.total_guesses:
+                best_guess = guess
+        return best_guess
+    
+    def status(self) -> str:
+        return '(cache={:.1%})'.format(self.cache.currsize / MAX_CACHE_SIZE)
+
+
+class ITreeBot(TreeBot):
+    """A tree optimized for first not failing any words, then to minimize the average depth."""
+    def __init__(
+            self, 
+            save_trees: bool=True
+            ) -> None:
+        super().__init__(
+            save_trees=save_trees, 
+            optimal_tree_file=(TREE_DIRECTORY / 'itree.p'),
+            starting_word='slope' if SAVE_TIME else None)
+        self.tree_file_func: Callable[[str], Path] | None = None
+        if save_trees:
+            self.tree_file_func = lambda word: TREE_DIRECTORY / (word + '_itree.p')
+
+    def initialize(
+            self,
+            dictionary: list[str],
+            possible_solutions: frozenset[str],
+            pattern_dict: dict[str, dict[tuple[int, ...], frozenset[str]]]
+            ) -> None:
+        super().initialize(dictionary, possible_solutions, pattern_dict)
+        optimizer = IdealOptimizer(pattern_dict, self.tree_file_func)
         super().initialize_with_optimizer(optimizer, dictionary, possible_solutions)
 
 
@@ -319,7 +421,7 @@ if __name__ == "__main__":
     possible_solutions = frozenset(['crane', 'bears', 'weary'])
     dictionary = list(possible_solutions)
     pattern_dict = generate_pattern_dict(dictionary, possible_solutions)
-    bot = ATreeBot(save_trees=False)
+    bot = ITreeBot(save_trees=False)
     bot.initialize(dictionary, possible_solutions, pattern_dict)
     for word_to_guess in possible_solutions:
         game = GameImpl(word_to_guess, True)

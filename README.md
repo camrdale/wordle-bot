@@ -86,6 +86,13 @@ total number of guesses it takes to guess every word in the tree. This is the
 same as minimizing the average depth of the tree, or minimizing the average
 number of guesses across all possible solutions.
 
+### Ideal Tree Bot (`i-tree`)
+
+Another tree bot combining the Height Tree Bot and Average Depth Tree Bot. It
+optimizes the tree primarily not to fail any words (use more than 6 guesses).
+Within that constraint, it optimizes to minimize the total number of guesses it
+takes to guess every word in the tree.
+
 ## Install & Run
 
 1. Clone the script:
@@ -110,26 +117,27 @@ python wordle.py
 
 Letting all the bots run over all 2,315 possible solutions, results in this:
 
-|                 **Bot** | `a-tree` | `h-tree` | `g-more` | `g-small` | `entropy` | `rando` |
-| ----------------------: | -------: | -------: | -------: | --------: | --------: | ------: |
-|     **Initialize time** |     ~48h |     ~48h |   1m 39s |    1m 39s |    1m 39s |      0s |
-|          **Solve time** |       0s |       0s |   1m 40s |    1m 42s |    1m 41s |     38s |
-| **Average guess count** |    3.518 |    3.646 |    3.527 |     3.672 |     3.604 |   6.443 |
-|  **Words guessed in 1** |        1 |        1 |        1 |         1 |         0 |       0 |
-|                   **2** |      146 |      120 |      122 |       104 |        77 |      35 |
-|                   **3** |     1015 |      827 |     1085 |       891 |      1041 |      89 |
-|                   **4** |      986 |     1121 |      912 |      1040 |       973 |     223 |
-|                   **5** |      143 |      242 |      164 |       228 |       179 |     270 |
-|                   **6** |       20 |        4 |       22 |        40 |        38 |     309 |
-|                  **7+** |        4 |        0 |        9 |        11 |         7 |     843 |
-|       **Starting word** |    SLATE |    SLOPE |    TRACE |     RAISE |     SOARE |     N/A |
+|                 **Bot** | `i-tree` | `a-tree` | `h-tree` | `g-more` | `g-small` | `entropy` | `rando` |
+| ----------------------: | -------: | -------: | -------: | -------: | --------: | --------: | ------: |
+|     **Initialize time** |     ~48h |     ~60h |     ~60h |   1m 39s |    1m 39s |    1m 39s |      0s |
+|          **Solve time** |       0s |       0s |       0s |   1m 40s |    1m 42s |    1m 41s |     38s |
+| **Average guess count** |        ? |    3.518 |    3.646 |    3.527 |     3.672 |     3.604 |   6.443 |
+|  **Words guessed in 1** |        1 |        1 |        1 |        1 |         1 |         0 |       0 |
+|                   **2** |        ? |      146 |      120 |      122 |       104 |        77 |      35 |
+|                   **3** |        ? |     1015 |      827 |     1085 |       891 |      1041 |      89 |
+|                   **4** |        ? |      986 |     1121 |      912 |      1040 |       973 |     223 |
+|                   **5** |        ? |      143 |      242 |      164 |       228 |       179 |     270 |
+|                   **6** |        ? |       20 |        4 |       22 |        40 |        38 |     309 |
+|                  **7+** |        0 |        4 |        0 |        9 |        11 |         7 |     843 |
+|       **Starting word** |        ? |    SLATE |    SLOPE |    TRACE |     RAISE |     SOARE |     N/A |
 
-Note that only the Height Tree Bot was able to succeed with all words in 6
-guesses, which is because it was optimized for that use case. Here are the words
-that were missed by the other bots (first 10 only):
+Note that only the Ideal Tree Bot and Height Tree Bot were able to succeed with
+all words in 6 guesses, which is because they are optimized for that use case.
+Here are the words that were missed by the other bots (first 10 only):
 
 - `a-tree`: baste, daunt, boxer, batch
 - `g-more`: dilly, goner, foyer, saner, folly, boxer, batch, gaunt, catch
-- `g-small`: latch, grape, lower, caste, homer, shake, hover, shade, shore, crown
+- `g-small`: latch, grape, lower, caste, homer, shake, hover, shade, shore,
+  crown
 - `entropy`: daunt, hatch, golly, shore, found, batch, gaunt
 - `rando`: oaken, decal, gloss, briny, chart, elbow, merry, bezel, mouth, humid
