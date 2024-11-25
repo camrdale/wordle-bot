@@ -25,6 +25,14 @@ average number of guesses required to complete all possible solutions is higher
 in hard mode. But it also makes the problem more tractable, as the number of
 possibilities that can be guessed on subsequent guesses is much smaller.
 
+One interesting note is that the best starting word found by using some methods
+(like entropy-based ones), SOARE, is not a good guess to guarantee the finding
+of all words in 6 or less guesses when Hard Mode is enabled. This guess can
+result in a pattern of green for the S, R and E, and yellow for the O. The
+remaining words after this guess and pattern are: STORE, SWORE, SCORE, SPORE,
+SHORE, SNORE. So there's no way to guearantee finding the solution, as each
+subeqeuent guess can only eliminate one word from the possible solutions.
+
 ### Possible Solutions
 
 The original Wordle contained a list of 2,315 possible solutions, in addition to
@@ -79,6 +87,11 @@ length). This results in a bot that gets the most possible words correct in the
 smallest number of guesses. Some of the other bots fail to get some words,
 requiring 7 guesses on a few of them.
 
+In addition to the Hard Mode restrictions, the tree bot also limits guesses to
+possible solutions, instead of using all possible legal guesses in the Wordle
+dictionary. This was done to speed up the process of optimizing trees, as
+searching through 13k words to find the optimal one was too time consuming.
+
 ### Average Depth Tree Bot (`a-tree`)
 
 Similar to the Height Tree Bot, but instead optimizes the tree to minimize the
@@ -92,6 +105,17 @@ Another tree bot combining the Height Tree Bot and Average Depth Tree Bot. It
 optimizes the tree primarily not to fail any words (use more than 6 guesses).
 Within that constraint, it optimizes to minimize the total number of guesses it
 takes to guess every word in the tree.
+
+### Dictionary Tree Bot (`i-tree`)
+
+Similar to the Ideal Tree Bot, but this tree bot expands the possible guesses to
+all legal guesses in the Wordle dictionary, not just the possible solutions. The
+optimization of the tree is still primarily not to fail any words, and then to
+minimize the total number of guesses it takes to guess every word in the
+possible solutions. Initially, this took 24 hours to process 1% of the tree for
+a single starting word. To speed it up, instead it only considers the 100
+possible legal guesses that have the highest entropy at each iteration in the
+tree.
 
 ## Install & Run
 
@@ -117,23 +141,24 @@ python wordle.py
 
 Letting all the bots run over all 2,315 possible solutions, results in this:
 
-|                 **Bot** | `i-tree` | `a-tree` | `h-tree` | `g-more` | `g-small` | `entropy` | `rando` |
-| ----------------------: | -------: | -------: | -------: | -------: | --------: | --------: | ------: |
-|     **Initialize time** |     ~48h |     ~60h |     ~60h |   1m 39s |    1m 39s |    1m 39s |      0s |
-|          **Solve time** |       0s |       0s |       0s |   1m 40s |    1m 42s |    1m 41s |     38s |
-| **Average guess count** |    3.554 |    3.518 |    3.622 |    3.527 |     3.672 |     3.604 |   6.443 |
-|  **Words guessed in 1** |        1 |        1 |        1 |        1 |         1 |         0 |       0 |
-|                   **2** |      130 |      146 |      125 |      122 |       104 |        77 |      35 |
-|                   **3** |      991 |     1015 |      855 |     1085 |       891 |      1041 |      89 |
-|                   **4** |      998 |      986 |     1102 |      912 |      1040 |       973 |     223 |
-|                   **5** |      169 |      143 |      230 |      164 |       228 |       179 |     270 |
-|                   **6** |       26 |       20 |        2 |       22 |        40 |        38 |     309 |
-|                  **7+** |        0 |        4 |        0 |        9 |        11 |         7 |     843 |
-|       **Starting word** |    PLATE |    SLATE |    SLEPT |    TRACE |     RAISE |     SOARE |     N/A |
+|                 **Bot** | `d-tree` | `i-tree` | `a-tree` | `h-tree` | `g-more` | `g-small` | `entropy` | `rando` |
+| ----------------------: | -------: | -------: | -------: | -------: | -------: | --------: | --------: | ------: |
+|     **Initialize time** |        ? |     ~48h |     ~60h |     ~60h |   1m 39s |    1m 39s |    1m 39s |      0s |
+|          **Solve time** |       0s |       0s |       0s |       0s |   1m 40s |    1m 42s |    1m 41s |     38s |
+| **Average guess count** |    3.510 |    3.554 |    3.518 |    3.622 |    3.527 |     3.672 |     3.604 |   6.443 |
+|  **Words guessed in 1** |        0 |        1 |        1 |        1 |        1 |         1 |         0 |       0 |
+|                   **2** |      135 |      130 |      146 |      125 |      122 |       104 |        77 |      35 |
+|                   **3** |     1054 |      991 |     1015 |      855 |     1085 |       891 |      1041 |      89 |
+|                   **4** |      955 |      998 |      986 |     1102 |      912 |      1040 |       973 |     223 |
+|                   **5** |      153 |      169 |      143 |      230 |      164 |       228 |       179 |     270 |
+|                   **6** |       18 |       26 |       20 |        2 |       22 |        40 |        38 |     309 |
+|                  **7+** |        0 |        0 |        4 |        0 |        9 |        11 |         7 |     843 |
+|       **Starting word** |    SALET |    PLATE |    SLATE |    SLEPT |    TRACE |     RAISE |     SOARE |     N/A |
 
-Note that only the Ideal Tree Bot and Height Tree Bot were able to succeed with
-all words in 6 guesses, which is because they are optimized for that use case.
-Here are the words that were missed by the other bots (first 10 only):
+Note that only the Dictionary Tree Bot, Ideal Tree Bot and Height Tree Bot were
+able to succeed with all words in 6 guesses, which is because they are optimized
+for that use case. Here are the words that were missed by the other bots (first
+10 only):
 
 - `a-tree`: baste, daunt, boxer, batch
 - `g-more`: dilly, goner, foyer, saner, folly, boxer, batch, gaunt, catch

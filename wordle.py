@@ -14,7 +14,7 @@ from interfaces import Bot, Game, CancellationWatcher
 from utils import calculate_pattern, format_list
 from entropy import EntropyBot
 from groups import LargestRemainingBot, MoreGroupsBot
-from tree import HTreeBot, ATreeBot, ITreeBot
+from tree import HTreeBot, ATreeBot, ITreeBot, DTreeBot
 from rando import RandomBot
 
 DICT_FILE = 'all_words.txt'
@@ -111,6 +111,7 @@ def main():
     stats: dict[str, dict[str, Any]] = {}
 
     bots: dict[str, Bot] = {
+        "d-tree": DTreeBot(cancellation_watcher),
         "i-tree": ITreeBot(cancellation_watcher),
         "a-tree": ATreeBot(cancellation_watcher),
         "h-tree": HTreeBot(cancellation_watcher),
