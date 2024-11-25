@@ -16,7 +16,7 @@ from scipy.stats import entropy # type: ignore
 from interfaces import Bot, Game, CancellationWatcher
 
 N_GUESSES = 10
-VERBOSE = True
+VERBOSE = False
 NUM_PROGRESS_BARS = 5
 TREE_DIRECTORY = Path('.') / 'trees'
 TREE_FILE = TREE_DIRECTORY / 'tree.p'
@@ -41,8 +41,7 @@ class Guess:
             ) -> None:
         self.word = word
         self.patterns = patterns
-        # Will be None for older Guess objects loaded from pickles before this field existed.
-        self.not_a_possible_solution: bool | None = not_a_possible_solution
+        self.not_a_possible_solution = not_a_possible_solution
     
     @functools.cached_property
     def height(self) -> int:
