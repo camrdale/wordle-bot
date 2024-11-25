@@ -70,6 +70,19 @@ class Guess:
     def total_guesses(self) -> int:
         """The total number of guesses it takes to exhaust the tree with this node as the root."""
         return self.total_nodes + sum(pattern.total_guesses for pattern in self.patterns.values())
+    
+    def __getstate__(self) -> dict[str, Any]:
+        # Don't save the cached properties.
+        state = self.__dict__.copy()
+        for property in ('height', 'width', 'total_nodes', 'total_guesses'):
+            state.pop(property, None)
+        return state
+    
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        # Don't load the cached properties.
+        for property in ('height', 'width', 'total_nodes', 'total_guesses'):
+            state.pop(property, None)
+        self.__dict__.update(state)
 
     def __str__(self) -> str:
         return 'Guess({0.word}) height={0.height},width={0.width},guesses={0.total_guesses}'.format(self)
@@ -154,7 +167,7 @@ class Optimizer(ABC):
                 if best_guess is None:
                     return None
                 patterns[pattern] = best_guess
-        guess = Guess(word, patterns, word in remaining_solutions)
+        guess = Guess(word, patterns, word not in remaining_solutions)
         if guess.height >= height_limit:
             return None
         return guess
@@ -598,7 +611,7 @@ class DTreeBot(TreeBot):
             cancellation_watcher,
             save_trees=save_trees, 
             optimal_tree_file=(TREE_DIRECTORY / 'dtree.p'),
-            starting_word='slope' if SAVE_TIME else None)
+            starting_word='salet' if SAVE_TIME else None)
         self.tree_file_func: Callable[[str], Path] | None = None
         if save_trees:
             self.tree_file_func = lambda word: TREE_DIRECTORY / (word + '_dtree.p')
