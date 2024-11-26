@@ -369,7 +369,7 @@ class HTreeBot(TreeBot):
         super().__init__(
             cancellation_watcher,
             save_trees=save_trees, 
-            starting_word='slope' if SAVE_TIME else None)
+            starting_word='clasp' if SAVE_TIME else None)
         self.tree_file_func: Callable[[str], Path] | None = None
         if save_trees:
             self.tree_file_func = lambda word: TREE_DIRECTORY / (word + '_tree.p')

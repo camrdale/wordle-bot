@@ -134,7 +134,7 @@ sudo apt install python3-scipy python3-tqdm python3-cachetools
 3. Run the script (it will take a long time to run all the bots)
 
 ```bash
-python wordle.py
+python3 wordle.py
 ```
 
 ## Statistics
@@ -143,17 +143,17 @@ Letting all the bots run over all 2,315 possible solutions, results in this:
 
 |                 **Bot** | `d-tree` | `i-tree` | `a-tree` | `h-tree` | `g-more` | `g-small` | `entropy` | `rando` |
 | ----------------------: | -------: | -------: | -------: | -------: | -------: | --------: | --------: | ------: |
-|     **Initialize time** |        ? |     ~48h |     ~60h |     ~60h |   1m 39s |    1m 39s |    1m 39s |      0s |
+|     **Initialize time** |     ~50h |     ~48h |     ~60h |     ~60h |   1m 39s |    1m 39s |    1m 39s |      0s |
 |          **Solve time** |       0s |       0s |       0s |       0s |   1m 40s |    1m 42s |    1m 41s |     38s |
-| **Average guess count** |    3.510 |    3.554 |    3.518 |    3.622 |    3.527 |     3.672 |     3.604 |   6.443 |
+| **Average guess count** |    3.509 |    3.554 |    3.518 |    3.642 |    3.527 |     3.672 |     3.603 |   6.443 |
 |  **Words guessed in 1** |        0 |        1 |        1 |        1 |        1 |         1 |         0 |       0 |
-|                   **2** |      135 |      130 |      146 |      125 |      122 |       104 |        77 |      35 |
-|                   **3** |     1054 |      991 |     1015 |      855 |     1085 |       891 |      1041 |      89 |
-|                   **4** |      955 |      998 |      986 |     1102 |      912 |      1040 |       973 |     223 |
-|                   **5** |      153 |      169 |      143 |      230 |      164 |       228 |       179 |     270 |
-|                   **6** |       18 |       26 |       20 |        2 |       22 |        40 |        38 |     309 |
+|                   **2** |      122 |      130 |      146 |      110 |      122 |       104 |        77 |      35 |
+|                   **3** |     1057 |      991 |     1015 |      829 |     1085 |       891 |      1043 |      89 |
+|                   **4** |      986 |      998 |      986 |     1153 |      912 |      1040 |       972 |     223 |
+|                   **5** |      135 |      169 |      143 |      221 |      164 |       228 |       178 |     270 |
+|                   **6** |       15 |       26 |       20 |        1 |       22 |        40 |        38 |     309 |
 |                  **7+** |        0 |        0 |        4 |        0 |        9 |        11 |         7 |     843 |
-|       **Starting word** |    SALET |    PLATE |    SLATE |    SLEPT |    TRACE |     RAISE |     SOARE |     N/A |
+|       **Starting word** |    SALET |    PLATE |    SLATE |    CLASP |    TRACE |     RAISE |     SOARE |     N/A |
 
 Note that only the Dictionary Tree Bot, Ideal Tree Bot and Height Tree Bot were
 able to succeed with all words in 6 guesses, which is because they are optimized
